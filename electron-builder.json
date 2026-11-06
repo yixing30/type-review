@@ -28,10 +28,14 @@
     ]
   },
   "nsis": {
+    "artifactName": "type-review-v${version}-Setup.${ext}",
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Type Review"
+  },
+  "portable": {
+    "artifactName": "type-review-v${version}-Portable.${ext}"
   }
 }
