@@ -1,0 +1,37 @@
+{
+  "appId": "com.xiaolai.typereview",
+  "productName": "TypeReview",
+  "npmRebuild": false,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "main.cjs",
+    "preload.cjs",
+    "src-tauri/icons/**/*"
+  ],
+  "asarUnpack": [
+    "**/*.node"
+  ],
+  "win": {
+    "icon": "src-tauri/icons/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Type Review"
+  }
+}

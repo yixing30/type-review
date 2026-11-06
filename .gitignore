@@ -5,3 +5,6 @@ reference-repo/
 *.local
 .DS_Store
 .claude/
+release/
+src-tauri/target/
+

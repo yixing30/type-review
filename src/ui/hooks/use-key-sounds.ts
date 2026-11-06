@@ -78,6 +78,16 @@ export function createKeySounds(
     ...(overrides.createAudioContext ? { createAudioContext: overrides.createAudioContext } : {}),
   });
 
+  const syncFromStorage = () => {
+    setPackNameSignal(readStoredPack());
+    setVolumeSignal(readStoredVolume());
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener("type-review:sound-sync", syncFromStorage);
+  }
+
   createEffect(() => {
     player.setPack(packName());
   });
@@ -85,19 +95,39 @@ export function createKeySounds(
     player.setVolume(volume());
   });
 
-  onCleanup(() => player.detach());
+  onCleanup(() => {
+    player.detach();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener("type-review:sound-sync", syncFromStorage);
+    }
+  });
 
   return {
     packName,
     setPackName: (name) => {
       setPackNameSignal(name);
       write(PACK_STORAGE_KEY, name);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("type-review:sound-changed", {
+            detail: { name, volume: volume() },
+          }),
+        );
+      }
     },
     volume,
     setVolume: (v) => {
       const clamped = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
       setVolumeSignal(clamped);
       write(VOLUME_STORAGE_KEY, String(clamped));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("type-review:sound-changed", {
+            detail: { name: packName(), volume: clamped },
+          }),
+        );
+      }
     },
   };
 }
