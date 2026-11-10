@@ -256,10 +256,20 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
     setGameState("playing");
   };
 
+  const LANES = [14, 30, 46, 62, 78];
+  let lastLaneIndex = -1;
+
   const spawnWord = (): void => {
     const pool = getWordPool();
     const wordText = pool[Math.floor(Math.random() * pool.length)] ?? "code";
-    const x = Math.floor(Math.random() * 70) + 10; // 10% to 80%
+
+    // Pick a lane different from the previous one to avoid overlap
+    let laneIdx = Math.floor(Math.random() * LANES.length);
+    if (laneIdx === lastLaneIndex) {
+      laneIdx = (laneIdx + 1) % LANES.length;
+    }
+    lastLaneIndex = laneIdx;
+    const x = LANES[laneIdx] ?? 45;
     const isBonus = Math.random() < 0.15; // 15% chance bonus word
 
     const newWord: FallingWord = {
@@ -267,7 +277,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
       text: wordText,
       x,
       y: 0,
-      speed: getBaseSpeed() * (0.8 + Math.random() * 0.4),
+      speed: getBaseSpeed() * (0.85 + Math.random() * 0.3),
       typedLength: 0,
       isBonus,
     };
@@ -373,6 +383,25 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
 
     if (gameState() !== "playing") return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      const targetedId = targetedWordId();
+      if (targetedId !== null) {
+        const curWord = fallingWords().find((w) => w.id === targetedId);
+        if (curWord) {
+          const nextLen = Math.max(0, curWord.typedLength - 1);
+          setFallingWords((prev) =>
+            prev.map((w) => (w.id === targetedId ? { ...w, typedLength: nextLen } : w)),
+          );
+          if (nextLen === 0) {
+            setTargetedWordId(null);
+          }
+        }
+      }
+      return;
+    }
+
     if (event.key.length !== 1) return;
 
     const char = event.key.toLowerCase();

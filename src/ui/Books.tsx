@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js";
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { Book, BookChapter, BookStore, KeyEventBus } from "../io";
 import { createBookStore, parseBookText, parseEpub } from "../io";
 import { BackLink } from "./components/BackLink";
@@ -19,19 +19,44 @@ function randomId(): string {
   return `b-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Normalises characters so standard keyboard keys match book typography.
+ * E.g., typing straight quotes ' or " matches curly ‘ ’ “ ” in books.
+ */
+function isCharMatch(inputKey: string, targetChar: string): boolean {
+  if (inputKey === targetChar) return true;
+  // Curly double quotes
+  if (inputKey === '"' && (targetChar === "“" || targetChar === "”" || targetChar === "„")) {
+    return true;
+  }
+  // Curly single quotes / apostrophes
+  if (inputKey === "'" && (targetChar === "‘" || targetChar === "’" || targetChar === "`")) {
+    return true;
+  }
+  // Dashes
+  if (inputKey === "-" && (targetChar === "—" || targetChar === "–")) {
+    return true;
+  }
+  return false;
+}
+
 export function Books(props: BooksProps): JSX.Element {
   const store = props.store ?? createBookStore();
 
   const [books, setBooks] = createSignal<Book[]>([]);
   const [selectedBookId, setSelectedBookId] = createSignal<string | null>(null);
-  const [showChaptersFor, setShowChaptersFor] = createSignal<string | null>(null);
+  const [currentChapterIndex, setCurrentChapterIndex] = createSignal(0);
+  const [currentParagraphIndex, setCurrentParagraphIndex] = createSignal(0);
+
+  const [showChaptersModal, setShowChaptersModal] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [info, setInfo] = createSignal<string | null>(null);
 
-  // Typing state for the active chapter
+  // Typing state for active paragraph
   const [typedChars, setTypedChars] = createSignal("");
-  const [errorCount, setErrorCount] = createSignal(0);
+  const [mistakeCount, setMistakeCount] = createSignal(0);
+  const [isErrorKey, setIsErrorKey] = createSignal(false);
   const [startTime, setStartTime] = createSignal<number | null>(null);
   const [liveWpm, setLiveWpm] = createSignal(0);
   const [chapterFinished, setChapterFinished] = createSignal(false);
@@ -51,19 +76,21 @@ export function Books(props: BooksProps): JSX.Element {
     void loadBooks();
   });
 
-  const selectedBook = (): Book | undefined => {
+  const selectedBook = createMemo<Book | null>(() => {
     const id = selectedBookId();
-    return id ? books().find((b) => b.id === id) : undefined;
-  };
+    if (!id) return null;
+    return books().find((b) => b.id === id) ?? null;
+  });
 
-  const currentChapter = (): BookChapter | undefined => {
-    const book = selectedBook();
-    if (!book || book.chapters.length === 0) return undefined;
-    return book.chapters[book.currentChapterIndex] ?? book.chapters[0];
-  };
+  const currentChapter = createMemo<BookChapter | null>(() => {
+    const b = selectedBook();
+    if (!b || b.chapters.length === 0) return null;
+    const cIdx = Math.min(Math.max(0, currentChapterIndex()), b.chapters.length - 1);
+    return b.chapters[cIdx] ?? null;
+  });
 
-  // Split chapter into manageable typing paragraphs
-  const chapterParagraphs = (): string[] => {
+  // Split chapter text into clean paragraphs
+  const chapterParagraphs = createMemo<string[]>(() => {
     const ch = currentChapter();
     if (!ch) return [];
     const rawParagraphs = ch.text
@@ -74,12 +101,12 @@ export function Books(props: BooksProps): JSX.Element {
 
     const paragraphs: string[] = [];
     for (const p of rawParagraphs) {
-      if (p.length > 500) {
-        // Split extra long paragraphs by sentence
+      if (p.length > 400) {
+        // Split long paragraph into sentence groups
         const sentences = p.split(/(?<=[.?!])\s+/);
         let cur = "";
         for (const s of sentences) {
-          if (`${cur} ${s}`.trim().length > 350 && cur.length > 0) {
+          if (`${cur} ${s}`.trim().length > 300 && cur.length > 0) {
             paragraphs.push(cur.trim());
             cur = s;
           } else {
@@ -94,50 +121,106 @@ export function Books(props: BooksProps): JSX.Element {
       }
     }
     return paragraphs.length > 0 ? paragraphs : [ch.text.trim()];
-  };
+  });
 
-  const activeTargetParagraph = (): string => {
-    const paragraphs = chapterParagraphs();
-    const book = selectedBook();
-    if (!book) return "";
-    const pIdx = Math.min(book.currentParagraphIndex, paragraphs.length - 1);
-    return paragraphs[pIdx] ?? "";
-  };
+  const activeTargetParagraph = createMemo<string>(() => {
+    const list = chapterParagraphs();
+    if (list.length === 0) return "";
+    const pIdx = Math.min(Math.max(0, currentParagraphIndex()), list.length - 1);
+    return list[pIdx] ?? "";
+  });
 
-  // Reset typing state when chapter or paragraph changes
+  // Reset typing states on chapter or paragraph change
   const resetTypingState = (): void => {
     setTypedChars("");
-    setErrorCount(0);
+    setMistakeCount(0);
+    setIsErrorKey(false);
     setStartTime(null);
     setLiveWpm(0);
     setChapterFinished(false);
   };
 
   createEffect(() => {
-    const book = selectedBook();
-    if (book) {
-      // Re-trigger reset
-      book.currentChapterIndex;
-      book.currentParagraphIndex;
-      resetTypingState();
-    }
+    // Track dependencies to reset state
+    selectedBookId();
+    currentChapterIndex();
+    currentParagraphIndex();
+    resetTypingState();
   });
 
-  // Calculate live WPM
+  // Open book from bookshelf
+  const openBook = (book: Book): void => {
+    setSelectedBookId(book.id);
+    setCurrentChapterIndex(book.currentChapterIndex || 0);
+    setCurrentParagraphIndex(book.currentParagraphIndex || 0);
+    resetTypingState();
+  };
+
   const updateWpm = (): void => {
     const s = startTime();
     if (!s) return;
     const elapsedMinutes = (Date.now() - s) / 60000;
-    if (elapsedMinutes > 0.02) {
+    if (elapsedMinutes > 0.01) {
       const wpm = Math.round(typedChars().length / 5 / elapsedMinutes);
       setLiveWpm(Math.max(0, wpm));
     }
   };
 
-  // Keyboard listener for typing
+  const advanceParagraph = (): void => {
+    const b = selectedBook();
+    if (!b) return;
+    const totalP = chapterParagraphs().length;
+    const nextP = currentParagraphIndex() + 1;
+
+    if (nextP < totalP) {
+      setCurrentParagraphIndex(nextP);
+      void store.updateProgress(b.id, currentChapterIndex(), nextP);
+    } else {
+      // Completed all paragraphs in this chapter
+      setChapterFinished(true);
+      const ch = currentChapter();
+      void store.updateProgress(b.id, currentChapterIndex(), nextP, ch?.id);
+      if (ch && !b.completedChapters.includes(ch.id)) {
+        b.completedChapters.push(ch.id);
+        setBooks([...books()]);
+      }
+    }
+  };
+
+  const nextChapter = (): void => {
+    const b = selectedBook();
+    if (!b) return;
+    if (currentChapterIndex() < b.chapters.length - 1) {
+      const nextC = currentChapterIndex() + 1;
+      setCurrentChapterIndex(nextC);
+      setCurrentParagraphIndex(0);
+      void store.updateProgress(b.id, nextC, 0);
+    }
+  };
+
+  const prevChapter = (): void => {
+    const b = selectedBook();
+    if (!b) return;
+    if (currentChapterIndex() > 0) {
+      const prevC = currentChapterIndex() - 1;
+      setCurrentChapterIndex(prevC);
+      setCurrentParagraphIndex(0);
+      void store.updateProgress(b.id, prevC, 0);
+    }
+  };
+
+  const jumpToChapter = (cIdx: number): void => {
+    const b = selectedBook();
+    if (!b) return;
+    setCurrentChapterIndex(cIdx);
+    setCurrentParagraphIndex(0);
+    void store.updateProgress(b.id, cIdx, 0);
+    setShowChaptersModal(false);
+  };
+
+  // Keyboard handler
   const handleKeyDown = (event: KeyboardEvent): void => {
     if (!selectedBookId() || chapterFinished()) return;
-    // Ignore hotkeys
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
@@ -148,10 +231,8 @@ export function Books(props: BooksProps): JSX.Element {
 
     if (event.key === "Backspace") {
       event.preventDefault();
-      const cur = typedChars();
-      if (cur.length > 0) {
-        setTypedChars(cur.slice(0, -1));
-      }
+      setIsErrorKey(false);
+      setTypedChars((prev) => prev.slice(0, -1));
       return;
     }
 
@@ -164,18 +245,20 @@ export function Books(props: BooksProps): JSX.Element {
       const curTyped = typedChars();
       const expectedChar = target[curTyped.length];
 
-      if (event.key === expectedChar) {
-        const nextTyped = curTyped + event.key;
+      if (expectedChar !== undefined && isCharMatch(event.key, expectedChar)) {
+        setIsErrorKey(false);
+        const nextTyped = curTyped + expectedChar;
         setTypedChars(nextTyped);
         updateWpm();
 
-        // Check if paragraph finished
         if (nextTyped.length === target.length) {
           advanceParagraph();
         }
       } else {
-        // Error
-        setErrorCount((e) => e + 1);
+        // Error key pressed
+        setIsErrorKey(true);
+        setMistakeCount((m) => m + 1);
+        setTimeout(() => setIsErrorKey(false), 200);
       }
     }
   };
@@ -188,68 +271,7 @@ export function Books(props: BooksProps): JSX.Element {
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   }
 
-  const advanceParagraph = (): void => {
-    const book = selectedBook();
-    if (!book) return;
-    const paragraphs = chapterParagraphs();
-    const nextP = book.currentParagraphIndex + 1;
-
-    if (nextP < paragraphs.length) {
-      // Move to next paragraph
-      book.currentParagraphIndex = nextP;
-      void store.updateProgress(book.id, book.currentChapterIndex, nextP);
-      resetTypingState();
-      setBooks([...books()]);
-    } else {
-      // Chapter completed!
-      setChapterFinished(true);
-      const ch = currentChapter();
-      void store.updateProgress(book.id, book.currentChapterIndex, nextP, ch?.id);
-      if (ch && !book.completedChapters.includes(ch.id)) {
-        book.completedChapters.push(ch.id);
-      }
-      setBooks([...books()]);
-    }
-  };
-
-  const nextChapter = (): void => {
-    const book = selectedBook();
-    if (!book) return;
-    if (book.currentChapterIndex < book.chapters.length - 1) {
-      const nextC = book.currentChapterIndex + 1;
-      book.currentChapterIndex = nextC;
-      book.currentParagraphIndex = 0;
-      void store.updateProgress(book.id, nextC, 0);
-      resetTypingState();
-      setBooks([...books()]);
-    }
-  };
-
-  const prevChapter = (): void => {
-    const book = selectedBook();
-    if (!book) return;
-    if (book.currentChapterIndex > 0) {
-      const prevC = book.currentChapterIndex - 1;
-      book.currentChapterIndex = prevC;
-      book.currentParagraphIndex = 0;
-      void store.updateProgress(book.id, prevC, 0);
-      resetTypingState();
-      setBooks([...books()]);
-    }
-  };
-
-  const jumpToChapter = (idx: number): void => {
-    const book = selectedBook();
-    if (!book) return;
-    book.currentChapterIndex = idx;
-    book.currentParagraphIndex = 0;
-    void store.updateProgress(book.id, idx, 0);
-    resetTypingState();
-    setBooks([...books()]);
-    setShowChaptersFor(null);
-  };
-
-  // Import book handler
+  // File import handler
   const handleFileUpload = async (e: Event): Promise<void> => {
     setError(null);
     setInfo(null);
@@ -295,7 +317,7 @@ export function Books(props: BooksProps): JSX.Element {
       await store.save(newBook);
       await loadBooks();
       setInfo(`Added "${newBook.title}" with ${chapters.length} chapters.`);
-      setSelectedBookId(newBook.id);
+      openBook(newBook);
     } catch (err: unknown) {
       logFailure("books", err);
       setError(err instanceof Error ? err.message : "Failed to import book.");
@@ -317,7 +339,7 @@ export function Books(props: BooksProps): JSX.Element {
 
   return (
     <main class="stage page page--narrow books-page">
-      <Show when={selectedBookId() === null}>
+      <Show when={selectedBook() === null}>
         {/* Bookshelf View */}
         <header class="page__head">
           <div class="label">books</div>
@@ -390,18 +412,19 @@ export function Books(props: BooksProps): JSX.Element {
                         <button
                           type="button"
                           class="book-card__btn-primary"
-                          onClick={() => setSelectedBookId(b.id)}
+                          onClick={() => openBook(b)}
                         >
                           Continue Typing
                         </button>
                         <button
                           type="button"
                           class="book-card__btn-sub"
-                          onClick={() =>
-                            setShowChaptersFor(showChaptersFor() === b.id ? null : b.id)
-                          }
+                          onClick={() => {
+                            setSelectedBookId(b.id);
+                            setShowChaptersModal(true);
+                          }}
                         >
-                          {showChaptersFor() === b.id ? "Hide Chapters" : "Chapters"}
+                          Chapters
                         </button>
                         <button
                           type="button"
@@ -412,30 +435,6 @@ export function Books(props: BooksProps): JSX.Element {
                           ×
                         </button>
                       </div>
-
-                      <Show when={showChaptersFor() === b.id}>
-                        <div class="book-card__chapter-list">
-                          <For each={b.chapters}>
-                            {(ch, idx) => (
-                              <button
-                                type="button"
-                                class="chapter-item"
-                                classList={{
-                                  "chapter-item--active": b.currentChapterIndex === idx(),
-                                  "chapter-item--done": b.completedChapters.includes(ch.id),
-                                }}
-                                onClick={() => {
-                                  setSelectedBookId(b.id);
-                                  jumpToChapter(idx());
-                                }}
-                              >
-                                <span class="chapter-item__title">{ch.title}</span>
-                                <span class="chapter-item__words">{ch.wordCount} words</span>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
                     </div>
                   </div>
                 );
@@ -449,167 +448,190 @@ export function Books(props: BooksProps): JSX.Element {
         </div>
       </Show>
 
+      {/* Book Reader & Typing View */}
       <Show when={selectedBook()}>
-        {(book) => {
-          const ch = currentChapter();
-          const paragraphs = chapterParagraphs();
-          const pIdx = Math.min(book().currentParagraphIndex, paragraphs.length - 1);
-          const target = activeTargetParagraph();
-          const typed = typedChars();
+        <div class="book-reader">
+          {/* Reader Topbar */}
+          <div class="book-reader__nav">
+            <button
+              type="button"
+              class="book-reader__back-btn"
+              onClick={() => setSelectedBookId(null)}
+            >
+              ← Bookshelf
+            </button>
+            <div class="book-reader__title-cluster">
+              <span class="book-reader__book-title">{selectedBook()?.title}</span>
+              <span class="book-reader__sep">·</span>
+              <button
+                type="button"
+                class="book-reader__chapter-badge"
+                onClick={() => setShowChaptersModal(true)}
+              >
+                Chapter {currentChapterIndex() + 1}: {currentChapter()?.title} ▾
+              </button>
+            </div>
+            <div class="book-reader__chapter-btns">
+              <button
+                type="button"
+                class="book-reader__nav-btn"
+                disabled={currentChapterIndex() <= 0}
+                onClick={prevChapter}
+              >
+                ← Prev
+              </button>
+              <button
+                type="button"
+                class="book-reader__nav-btn"
+                disabled={currentChapterIndex() >= (selectedBook()?.chapters.length ?? 1) - 1}
+                onClick={nextChapter}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
 
-          return (
-            <div class="book-reader">
-              {/* Reader Header */}
-              <div class="book-reader__nav">
-                <button
-                  type="button"
-                  class="book-reader__back-btn"
-                  onClick={() => setSelectedBookId(null)}
-                >
-                  ← Bookshelf
-                </button>
-                <div class="book-reader__title-cluster">
-                  <span class="book-reader__book-title">{book().title}</span>
-                  <span class="book-reader__sep">·</span>
-                  <select
-                    class="book-reader__chapter-select"
-                    value={book().currentChapterIndex}
-                    onChange={(e) => jumpToChapter(Number(e.currentTarget.value))}
-                  >
-                    <For each={book().chapters}>
-                      {(c, i) => (
-                        <option value={i()}>
-                          {i() + 1}. {c.title}
-                        </option>
-                      )}
-                    </For>
-                  </select>
+          {/* Stats & Progress HUD */}
+          <div class="book-reader__stats-bar">
+            <span class="stat-badge">
+              Ch {currentChapterIndex() + 1}/{selectedBook()?.chapters.length}
+            </span>
+            <span class="stat-badge">
+              Paragraph {currentParagraphIndex() + 1}/{chapterParagraphs().length}
+            </span>
+            <span class="stat-badge stat-badge--accent">{liveWpm()} WPM</span>
+            <span class="stat-badge">Mistakes: {mistakeCount()}</span>
+            <button
+              type="button"
+              class="stat-badge stat-badge--link"
+              onClick={() => {
+                const ch = currentChapter();
+                if (ch) props.onRunPassage(ch.text);
+              }}
+              title="Run this chapter in TYPE's full screen practice engine"
+            >
+              Practice in TYPE ↗
+            </button>
+          </div>
+
+          {/* Reading & Typing Surface */}
+          <div class="book-reader__surface">
+            <h3 class="book-reader__heading">{currentChapter()?.title}</h3>
+
+            {/* Previously typed paragraphs */}
+            <For each={chapterParagraphs().slice(0, currentParagraphIndex())}>
+              {(p) => <p class="book-reader__paragraph book-reader__paragraph--done">{p}</p>}
+            </For>
+
+            {/* Active Typing Paragraph */}
+            <Show when={!chapterFinished()}>
+              <div
+                class="book-reader__active-box"
+                classList={{ "book-reader__active-box--error": isErrorKey() }}
+              >
+                <p class="book-reader__paragraph book-reader__paragraph--active">
+                  <For each={activeTargetParagraph().split("")}>
+                    {(char, i) => {
+                      const isTyped = () => i() < typedChars().length;
+                      const isCurrent = () => i() === typedChars().length;
+                      return (
+                        <span
+                          class="book-char"
+                          classList={{
+                            "book-char--typed": isTyped(),
+                            "book-char--current": isCurrent(),
+                          }}
+                        >
+                          {char}
+                        </span>
+                      );
+                    }}
+                  </For>
+                </p>
+                <div class="book-reader__hint">
+                  Type the text above. Space advances words. Backspace corrects errors.
                 </div>
-                <div class="book-reader__chapter-btns">
+              </div>
+            </Show>
+
+            {/* Chapter Finished Celebration */}
+            <Show when={chapterFinished()}>
+              <div class="chapter-completed-card">
+                <h4>🎉 Chapter Completed!</h4>
+                <p>
+                  Speed: <b>{liveWpm()} WPM</b> · Mistakes: <b>{mistakeCount()}</b>
+                </p>
+                <div class="chapter-completed-card__actions">
+                  <Show
+                    when={currentChapterIndex() < (selectedBook()?.chapters.length ?? 1) - 1}
+                    fallback={
+                      <div class="all-completed-banner">
+                        ✨ You have completed every chapter of this book!
+                      </div>
+                    }
+                  >
+                    <button type="button" class="btn-primary" onClick={nextChapter}>
+                      Next Chapter →
+                    </button>
+                  </Show>
                   <button
                     type="button"
-                    class="book-reader__nav-btn"
-                    disabled={book().currentChapterIndex <= 0}
-                    onClick={prevChapter}
+                    class="btn-secondary"
+                    onClick={() => setSelectedBookId(null)}
                   >
-                    ← Prev
-                  </button>
-                  <button
-                    type="button"
-                    class="book-reader__nav-btn"
-                    disabled={book().currentChapterIndex >= book().chapters.length - 1}
-                    onClick={nextChapter}
-                  >
-                    Next →
+                    Back to Bookshelf
                   </button>
                 </div>
               </div>
+            </Show>
 
-              {/* Progress & Live Stats Bar */}
-              <div class="book-reader__stats-bar">
-                <span class="stat-badge">
-                  Chapter {book().currentChapterIndex + 1}/{book().chapters.length}
-                </span>
-                <span class="stat-badge">
-                  Paragraph {pIdx + 1}/{paragraphs.length}
-                </span>
-                <span class="stat-badge stat-badge--accent">{liveWpm()} WPM</span>
-                <span class="stat-badge">Mistakes: {errorCount()}</span>
-                <button
-                  type="button"
-                  class="stat-badge stat-badge--link"
-                  onClick={() => ch && props.onRunPassage(ch.text)}
-                  title="Run this chapter in TYPE's full screen practice engine"
-                >
-                  Practice in TYPE ↗
-                </button>
-              </div>
+            {/* Upcoming paragraphs preview */}
+            <For each={chapterParagraphs().slice(currentParagraphIndex() + 1)}>
+              {(p) => <p class="book-reader__paragraph book-reader__paragraph--preview">{p}</p>}
+            </For>
+          </div>
 
-              {/* Reading & Typing Surface */}
-              <div class="book-reader__surface">
-                <h3 class="book-reader__heading">{ch?.title}</h3>
-
-                {/* Previously typed paragraphs in this chapter */}
-                <For each={paragraphs.slice(0, pIdx)}>
-                  {(p) => <p class="book-reader__paragraph book-reader__paragraph--done">{p}</p>}
-                </For>
-
-                {/* Active Typing Paragraph */}
-                <Show when={!chapterFinished()}>
-                  <div class="book-reader__active-box">
-                    <p class="book-reader__paragraph book-reader__paragraph--active">
-                      <For each={target.split("")}>
-                        {(char, i) => {
-                          const isTyped = i() < typed.length;
-                          const isCurrent = i() === typed.length;
-                          return (
-                            <span
-                              class="book-char"
-                              classList={{
-                                "book-char--typed": isTyped,
-                                "book-char--current": isCurrent,
-                              }}
-                            >
-                              {char}
-                            </span>
-                          );
-                        }}
-                      </For>
-                    </p>
-                    <div class="book-reader__hint">
-                      Type the text above. Space advances words. Backspace corrects.
-                    </div>
-                  </div>
-                </Show>
-
-                {/* Chapter Finished Celebration */}
-                <Show when={chapterFinished()}>
-                  <div class="chapter-completed-card">
-                    <h4>🎉 Chapter Completed!</h4>
-                    <p>
-                      Speed: <b>{liveWpm()} WPM</b> · Accuracy:{" "}
-                      <b>
-                        {Math.max(
-                          0,
-                          Math.round(
-                            ((target.length - errorCount()) / Math.max(1, target.length)) * 100,
-                          ),
-                        )}
-                        %
-                      </b>
-                    </p>
-                    <div class="chapter-completed-card__actions">
-                      <Show
-                        when={book().currentChapterIndex < book().chapters.length - 1}
-                        fallback={
-                          <div class="all-completed-banner">
-                            ✨ You have finished all chapters of this book!
-                          </div>
-                        }
-                      >
-                        <button type="button" class="btn-primary" onClick={nextChapter}>
-                          Next Chapter →
-                        </button>
-                      </Show>
+          {/* Chapters Drawer / Modal */}
+          <Show when={showChaptersModal()}>
+            <div class="book-modal-backdrop">
+              <div class="book-modal" role="dialog" aria-modal="true">
+                <div class="book-modal__head">
+                  <h4>Chapters: {selectedBook()?.title}</h4>
+                  <button
+                    type="button"
+                    class="book-modal__close"
+                    onClick={() => setShowChaptersModal(false)}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div class="book-modal__list">
+                  <For each={selectedBook()?.chapters}>
+                    {(ch, idx) => (
                       <button
                         type="button"
-                        class="btn-secondary"
-                        onClick={() => setSelectedBookId(null)}
+                        class="chapter-modal-item"
+                        classList={{
+                          "chapter-modal-item--active": currentChapterIndex() === idx(),
+                          "chapter-modal-item--done": selectedBook()?.completedChapters.includes(
+                            ch.id,
+                          ),
+                        }}
+                        onClick={() => jumpToChapter(idx())}
                       >
-                        Back to Bookshelf
+                        <span class="chapter-modal-item__title">
+                          {idx() + 1}. {ch.title}
+                        </span>
+                        <span class="chapter-modal-item__words">{ch.wordCount} words</span>
                       </button>
-                    </div>
-                  </div>
-                </Show>
-
-                {/* Upcoming paragraphs preview */}
-                <For each={paragraphs.slice(pIdx + 1)}>
-                  {(p) => <p class="book-reader__paragraph book-reader__paragraph--preview">{p}</p>}
-                </For>
+                    )}
+                  </For>
+                </div>
               </div>
             </div>
-          );
-        }}
+          </Show>
+        </div>
       </Show>
     </main>
   );

@@ -2405,17 +2405,139 @@ kbd {
   margin: 0;
   user-select: none;
 }
+.book-reader__chapter-badge {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  border: var(--bw-1) solid var(--color-border);
+  border-radius: var(--r-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+.book-reader__chapter-badge:hover {
+  border-color: var(--color-accent);
+}
+.book-reader__active-box--error {
+  border-color: var(--color-danger, #f43f5e) !important;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.25) !important;
+}
 .book-char {
+  display: inline-block;
+  white-space: pre-wrap;
   position: relative;
+  min-width: 0.55em;
 }
 .book-char--typed {
   color: var(--color-text);
 }
 .book-char--current {
-  color: var(--color-accent);
-  text-decoration: underline;
-  background: var(--color-accent-faint, rgba(95, 209, 216, 0.25));
+  color: var(--color-bg);
+  background: var(--color-accent);
   border-radius: 2px;
+  animation: book-caret-blink 1s ease-in-out infinite;
+}
+@keyframes book-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Modal Drawer for Chapters */
+.book-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.book-modal {
+  background: var(--color-surface);
+  border: var(--bw-1) solid var(--color-border);
+  border-radius: var(--r-3);
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+}
+.book-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--bw-1) solid var(--color-border);
+}
+.book-modal__head h4 {
+  margin: 0;
+  font-size: var(--fs-16);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-modal__close {
+  background: transparent;
+  border: none;
+  font-size: var(--fs-20);
+  color: var(--color-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.book-modal__close:hover {
+  color: var(--color-text);
+}
+.book-modal__list {
+  padding: var(--space-3) var(--space-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.chapter-modal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  color: var(--color-muted);
+}
+.chapter-modal-item:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.chapter-modal-item--active {
+  background: var(--color-accent-faint, rgba(95, 209, 216, 0.15));
+  color: var(--color-accent);
+  font-weight: var(--fw-medium);
+}
+.chapter-modal-item--done {
+  opacity: 0.65;
+}
+.chapter-modal-item__title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chapter-modal-item__words {
+  font-size: var(--fs-11);
+  color: var(--color-dim);
+  margin-left: var(--space-3);
 }
 .book-reader__hint {
   margin-top: var(--space-3);
