@@ -13,7 +13,8 @@ export type FailureStage =
   | "input"
   | "input-callback"
   | "settings"
-  | "user-corpus";
+  | "user-corpus"
+  | "books";
 
 export function logFailure(
   stage: FailureStage,

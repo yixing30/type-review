@@ -4,10 +4,14 @@ export interface BottomNavProps {
   activePractice: boolean;
   activeStats: boolean;
   activeLibrary: boolean;
+  activeBooks: boolean;
+  activeGame: boolean;
   activeSettings: boolean;
   onPractice: () => void;
   onStats: () => void;
   onLibrary: () => void;
+  onBooks: () => void;
+  onGame: () => void;
   onSettings: () => void;
 }
 
@@ -22,6 +26,8 @@ export function BottomNav(props: BottomNavProps): JSX.Element {
       <NavLink label="practice" active={props.activePractice} onClick={props.onPractice} />
       <NavLink label="stats" active={props.activeStats} onClick={props.onStats} />
       <NavLink label="library" active={props.activeLibrary} onClick={props.onLibrary} />
+      <NavLink label="books" active={props.activeBooks} onClick={props.onBooks} />
+      <NavLink label="game" active={props.activeGame} onClick={props.onGame} />
       <NavLink label="settings" active={props.activeSettings} onClick={props.onSettings} />
     </nav>
   );

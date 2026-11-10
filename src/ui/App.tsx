@@ -18,6 +18,7 @@ import {
 } from "../io";
 import { About } from "./About";
 import { ArticleView } from "./articles/ArticleView";
+import { Books } from "./Books";
 import { Copyright } from "./Copyright";
 import { Credits } from "./Credits";
 import type { LoadBanner, SaveBanner } from "./components/Banners";
@@ -49,6 +50,7 @@ import { Settings } from "./Settings";
 import { ShareView } from "./Share";
 import { SiteStats } from "./SiteStats";
 import { StatsView } from "./Stats";
+import { TypingGame } from "./TypingGame";
 import { createTheme } from "./theme";
 import { UserGuide } from "./UserGuide";
 
@@ -359,6 +361,18 @@ export function App(props: AppProps = {}): JSX.Element {
             />
           </Show>
 
+          <Show when={is("books")}>
+            <Books
+              keyBus={keyBus}
+              onBack={() => router.navigate("practice")}
+              onRunPassage={runCustomText}
+            />
+          </Show>
+
+          <Show when={is("game")}>
+            <TypingGame keyBus={keyBus} onBack={() => router.navigate("practice")} />
+          </Show>
+
           <InfoPages routeName={router.route().name} onNavigate={(to) => router.navigate(to)} />
 
           <Show when={is("share")}>
@@ -403,10 +417,14 @@ export function App(props: AppProps = {}): JSX.Element {
             activePractice={is("practice")}
             activeStats={is("stats")}
             activeLibrary={is("library")}
+            activeBooks={is("books")}
+            activeGame={is("game")}
             activeSettings={is("settings")}
             onPractice={() => router.navigate("practice")}
             onStats={() => router.navigate("stats")}
             onLibrary={() => router.navigate("library")}
+            onBooks={() => router.navigate("books")}
+            onGame={() => router.navigate("game")}
             onSettings={() => router.navigate("settings")}
           />
 

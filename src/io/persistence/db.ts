@@ -11,10 +11,11 @@
  */
 
 export const DB_NAME = "type-review";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const PROFILE_STORE = "profile";
 export const USER_CORPUS_STORE = "user-corpus";
+export const BOOKS_STORE = "books";
 
 function upgrade(db: IDBDatabase): void {
   if (!db.objectStoreNames.contains(PROFILE_STORE)) {
@@ -22,6 +23,9 @@ function upgrade(db: IDBDatabase): void {
   }
   if (!db.objectStoreNames.contains(USER_CORPUS_STORE)) {
     db.createObjectStore(USER_CORPUS_STORE, { keyPath: "id" });
+  }
+  if (!db.objectStoreNames.contains(BOOKS_STORE)) {
+    db.createObjectStore(BOOKS_STORE, { keyPath: "id" });
   }
 }
 

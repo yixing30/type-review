@@ -1,3 +1,9 @@
+export type { BookStore } from "./books/book-store";
+export { createBookStore, IndexedDbBookStore, InMemoryBookStore } from "./books/book-store";
+export type { Book, BookChapter } from "./books/book-types";
+export { parseBookText } from "./books/parse-book-text";
+export { parseEpub } from "./books/parse-epub";
+export { SAMPLE_BOOKS } from "./books/sample-books";
 export { bundledCode, bundledQuotes } from "./corpus/bundled";
 export type { ChannelMeta } from "./corpus/channel-meta";
 export {
