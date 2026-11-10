@@ -220,11 +220,25 @@ export function Books(props: BooksProps): JSX.Element {
 
   // Keyboard handler
   const handleKeyDown = (event: KeyboardEvent): void => {
-    if (!selectedBookId() || chapterFinished()) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
+
+    if (event.key === "Escape") {
+      if (showChaptersModal()) {
+        event.preventDefault();
+        setShowChaptersModal(false);
+        return;
+      }
+      if (selectedBookId()) {
+        event.preventDefault();
+        setSelectedBookId(null);
+        return;
+      }
+    }
+
+    if (!selectedBookId() || chapterFinished()) return;
 
     const target = activeTargetParagraph();
     if (!target) return;
@@ -376,71 +390,83 @@ export function Books(props: BooksProps): JSX.Element {
             </div>
           </Show>
 
-          <div class="books-grid">
-            <For each={books()}>
-              {(b) => {
-                const totalChapters = b.chapters.length;
-                const progressPct = Math.round(
-                  (b.completedChapters.length / Math.max(1, totalChapters)) * 100,
-                );
-                return (
-                  <div class="book-card">
-                    <div
-                      class="book-card__spine"
-                      style={{ background: b.coverColor ?? "var(--color-accent)" }}
-                    />
-                    <div class="book-card__content">
-                      <div class="book-card__title" title={b.title}>
-                        {b.title}
-                      </div>
-                      <Show when={b.author}>
-                        <div class="book-card__author">{b.author}</div>
-                      </Show>
-                      <div class="book-card__meta">
-                        {totalChapters} chapters · {b.completedChapters.length} finished (
-                        {progressPct}%)
-                      </div>
+          <Show
+            when={books().length > 0}
+            fallback={
+              <div class="empty-state">
+                <p>
+                  Your bookshelf is empty. Import an EPUB, TXT, or Markdown book above to start
+                  typing.
+                </p>
+              </div>
+            }
+          >
+            <div class="books-grid">
+              <For each={books()}>
+                {(b) => {
+                  const totalChapters = b.chapters.length;
+                  const progressPct = Math.round(
+                    (b.completedChapters.length / Math.max(1, totalChapters)) * 100,
+                  );
+                  return (
+                    <div class="book-card">
+                      <div
+                        class="book-card__spine"
+                        style={{ background: b.coverColor ?? "var(--color-accent)" }}
+                      />
+                      <div class="book-card__content">
+                        <div class="book-card__title" title={b.title}>
+                          {b.title}
+                        </div>
+                        <Show when={b.author}>
+                          <div class="book-card__author">{b.author}</div>
+                        </Show>
+                        <div class="book-card__meta">
+                          {totalChapters} chapters · {b.completedChapters.length} finished (
+                          {progressPct}%)
+                        </div>
 
-                      <div class="book-card__progress-bar">
-                        <div
-                          class="book-card__progress-fill"
-                          style={{ width: `${progressPct}%` }}
-                        />
-                      </div>
+                        <div class="book-card__progress-bar">
+                          <div
+                            class="book-card__progress-fill"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
 
-                      <div class="book-card__actions">
-                        <button
-                          type="button"
-                          class="book-card__btn-primary"
-                          onClick={() => openBook(b)}
-                        >
-                          Continue Typing
-                        </button>
-                        <button
-                          type="button"
-                          class="book-card__btn-sub"
-                          onClick={() => {
-                            setSelectedBookId(b.id);
-                            setShowChaptersModal(true);
-                          }}
-                        >
-                          Chapters
-                        </button>
-                        <button
-                          type="button"
-                          class="book-card__btn-del"
-                          title="Delete book"
-                          onClick={() => deleteBook(b.id, b.title)}
-                        >
-                          ×
-                        </button>
+                        <div class="book-card__actions">
+                          <button
+                            type="button"
+                            class="book-card__btn-primary"
+                            onClick={() => openBook(b)}
+                          >
+                            Continue Typing
+                          </button>
+                          <button
+                            type="button"
+                            class="book-card__btn-sub"
+                            onClick={() => {
+                              setSelectedBookId(b.id);
+                              setShowChaptersModal(true);
+                            }}
+                          >
+                            Chapters
+                          </button>
+                          <button
+                            type="button"
+                            class="book-card__btn-del"
+                            title="Delete book"
+                            onClick={() => deleteBook(b.id, b.title)}
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </section>
 
         <div class="actions">
@@ -549,7 +575,8 @@ export function Books(props: BooksProps): JSX.Element {
                   </For>
                 </p>
                 <div class="book-reader__hint">
-                  Type the text above. Space advances words. Backspace corrects errors.
+                  Type the text above. Press <kbd>Space</kbd> between words · <kbd>⌫ Backspace</kbd>{" "}
+                  to correct · <kbd>Esc</kbd> for bookshelf.
                 </div>
               </div>
             </Show>

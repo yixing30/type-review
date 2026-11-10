@@ -547,7 +547,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
 
           <div class="game-start-actions">
             <button type="button" class="btn-primary btn-start-game" onClick={startGame}>
-              Start Game (Enter)
+              Start Game <kbd>↵</kbd>
             </button>
           </div>
         </section>
@@ -571,7 +571,16 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
             </div>
             <div class="game-hud__item">
               <span class="hud-label">COMBO</span>
-              <span class="hud-value hud-value--combo">x{combo()}</span>
+              <span
+                class="hud-value hud-value--combo"
+                classList={{
+                  "hud-value--combo-warm": combo() >= 3 && combo() < 5,
+                  "hud-value--combo-hot": combo() >= 5 && combo() < 10,
+                  "hud-value--combo-fire": combo() >= 10,
+                }}
+              >
+                x{combo()}
+              </span>
             </div>
             <div class="game-hud__item">
               <span class="hud-label">LIVES</span>
@@ -639,7 +648,9 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
             <div class="game-overlay">
               <div class="game-overlay__card">
                 <h3>Game Paused</h3>
-                <p>Press Esc or click below to resume.</p>
+                <p>
+                  Press <kbd>Esc</kbd> or click below to resume.
+                </p>
                 <div class="game-overlay__actions">
                   <button type="button" class="btn-primary" onClick={() => setGameState("playing")}>
                     Resume
@@ -682,7 +693,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
 
           <div class="game-start-actions">
             <button type="button" class="btn-primary" onClick={startGame}>
-              Play Again (Enter)
+              Play Again <kbd>↵</kbd>
             </button>
             <button type="button" class="btn-secondary" onClick={() => setGameState("menu")}>
               Back to Menu
