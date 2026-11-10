@@ -2880,6 +2880,16 @@ kbd {
   transform: translate(-50%, 0) scale(1.08);
   z-index: 5;
 }
+.falling-word--error {
+  border-color: var(--color-danger, #f43f5e) !important;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.6), 0 0 0 1px var(--color-danger, #f43f5e) !important;
+  animation: word-error-shake 0.22s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@keyframes word-error-shake {
+  0%, 100% { transform: translate(-50%, 0) scale(1.08); }
+  25% { transform: translate(calc(-50% - 4px), 0) scale(1.08); }
+  75% { transform: translate(calc(-50% + 4px), 0) scale(1.08); }
+}
 .falling-word--bonus {
   border-color: #f59e0b;
   box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);

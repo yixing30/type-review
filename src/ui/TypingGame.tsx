@@ -215,6 +215,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
   const [wordsCleared, setWordsCleared] = createSignal(0);
   const [fallingWords, setFallingWords] = createSignal<FallingWord[]>([]);
   const [targetedWordId, setTargetedWordId] = createSignal<number | null>(null);
+  const [targetErrorWordId, setTargetErrorWordId] = createSignal<number | null>(null);
   const [screenFlash, setScreenFlash] = createSignal(false);
   const [popups, setPopups] = createSignal<{ id: number; text: string; x: number; y: number }[]>(
     [],
@@ -249,11 +250,13 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
     setWordsCleared(0);
     setFallingWords([]);
     setTargetedWordId(null);
+    setTargetErrorWordId(null);
     setPopups([]);
     wordIdCounter = 0;
     wordsSpawnedInWave = 0;
     lastSpawnTime = Date.now();
     setGameState("playing");
+    spawnWord();
   };
 
   const LANES = [14, 30, 46, 62, 78];
@@ -338,6 +341,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
             hitBottom = true;
             if (targetedWordId() === w.id) {
               setTargetedWordId(null);
+              setTargetErrorWordId(null);
             }
           } else {
             remaining.push({ ...w, y: nextY });
@@ -386,6 +390,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
 
     if (event.key === "Backspace") {
       event.preventDefault();
+      setTargetErrorWordId(null);
       const targetedId = targetedWordId();
       if (targetedId !== null) {
         const curWord = fallingWords().find((w) => w.id === targetedId);
@@ -402,6 +407,19 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
       return;
     }
 
+    if (event.key === "Delete") {
+      event.preventDefault();
+      const targetedId = targetedWordId();
+      if (targetedId !== null) {
+        setFallingWords((prev) =>
+          prev.map((w) => (w.id === targetedId ? { ...w, typedLength: 0 } : w)),
+        );
+        setTargetedWordId(null);
+        setTargetErrorWordId(null);
+      }
+      return;
+    }
+
     if (event.key.length !== 1) return;
 
     const char = event.key.toLowerCase();
@@ -409,11 +427,12 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
     const targetedId = targetedWordId();
 
     if (targetedId !== null) {
-      // We already have a targeted word
+      // Locked onto a target — STRICT LOCK: do not switch words mid-word!
       const target = words.find((w) => w.id === targetedId);
       if (target) {
         const expectedChar = target.text[target.typedLength]?.toLowerCase();
         if (char === expectedChar) {
+          setTargetErrorWordId(null);
           const nextTyped = target.typedLength + 1;
           if (nextTyped >= target.text.length) {
             // Word fully typed! Destroy it!
@@ -424,12 +443,24 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
               prev.map((w) => (w.id === targetedId ? { ...w, typedLength: nextTyped } : w)),
             );
           }
-          return;
+        } else {
+          // Typo on the locked target: break combo streak and show error feedback
+          setCombo(1);
+          setTargetErrorWordId(target.id);
+          setTimeout(() => {
+            if (targetErrorWordId() === target.id) {
+              setTargetErrorWordId(null);
+            }
+          }, 240);
         }
+        return; // Always return so we never switch to other words mid-word!
       }
+      // Target was removed / despawned
+      setTargetedWordId(null);
+      setTargetErrorWordId(null);
     }
 
-    // No target or wrong key: check if any approaching word starts with this char
+    // Only when NO word is currently targeted: check if any approaching word starts with this char
     // Pick the word closest to bottom (highest Y) that matches
     const matchingWords = words
       .filter((w) => w.text.startsWith(char) && w.typedLength === 0)
@@ -438,6 +469,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
     const firstMatch = matchingWords[0];
     if (firstMatch) {
       setTargetedWordId(firstMatch.id);
+      setTargetErrorWordId(null);
       const nextTyped = 1;
       if (nextTyped >= firstMatch.text.length) {
         destroyWord(firstMatch);
@@ -609,6 +641,7 @@ export function TypingGame(props: TypingGameProps): JSX.Element {
                     classList={{
                       "falling-word--targeted": isTargeted,
                       "falling-word--bonus": !!w.isBonus,
+                      "falling-word--error": targetErrorWordId() === w.id,
                     }}
                     style={{
                       left: `${w.x}%`,
